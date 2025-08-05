@@ -73,6 +73,11 @@ This use case describes an online retail store preparing for a flash sale event.
         - **Time-to-React:** The time from when the threshold is breached to when new container instances are ready to serve traffic must be very short (e.g., under 2 minutes) to prevent service degradation.
         - **Scheduled Scale-Down:** To optimize costs, the system must automatically scale down to normal levels after the event is over.
 
+- **Special Considerations:**
+    - **Threshold Rationale (75%):** This threshold provides a good balance. It indicates that the system is under significant load but leaves a 25% buffer to absorb momentary traffic spikes without immediately dropping requests, giving the autoscaler time to react.
+    - **Time-to-React Rationale (2 minutes):** For a high-stakes, short-lived event like a flash sale, a rapid response is critical. A 2-minute window from detection to readiness is an aggressive but necessary goal to prevent user abandonment. It forces the use of optimized container images and a cluster configured for fast node provisioning.
+    - **Scale-Down Rationale (Scheduled):** A reactive scale-down is not used because the event has a predictable end time. A scheduled scale-down is more efficient, as it can terminate the expensive, high-capacity resources immediately after the sale concludes, rather than waiting for traffic to naturally decrease and a cooldown period to pass.
+
 ## 5. Testing and Monitoring
 
 To ensure the auto-scaling system is reliable and performs as expected, the platform must provide robust testing and monitoring capabilities.
