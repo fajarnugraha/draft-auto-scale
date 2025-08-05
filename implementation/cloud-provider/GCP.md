@@ -76,3 +76,27 @@ A recommended dashboard in **Cloud Monitoring** for observing GKE auto-scaling w
 -   **Node Count:** A chart showing the number of nodes in the GKE cluster's node pool, which visualizes the GKE Cluster Autoscaler's activity.
 
 These metrics are available by default when GKE monitoring is enabled, making it straightforward to build a comprehensive dashboard.
+
+## 6. Case Study: Online Test Platform
+
+This use case requires a more sophisticated setup than the flash sale due to its stateful nature and the need to handle unpredictable, tenant-driven events.
+
+### Implementation Steps
+
+1.  **Session Persistence (Sticky Sessions):**
+    -   This is a critical prerequisite. On GKE, this is configured on the **BackendConfig** resource associated with the service.
+    -   You would set the `affinityType` to `CLIENT_IP` for simple affinity or `GENERATED_COOKIE` for a more robust cookie-based approach. This ensures the Google Cloud Load Balancer always directs a specific user to the same pod.
+
+2.  **Scenario 1: Predictable, Coordinated Event:**
+    -   The implementation is identical to the generic Kubernetes use case. A **CronJob** is used to proactively patch the HPA resource with a higher `minReplicas` count before the event begins, and a second CronJob scales it back down afterward.
+
+3.  **Scenario 2: Unpredictable, Tenant-Driven Event:**
+    -   This requires an event-driven approach using **KEDA** combined with a GCP service like **Cloud Pub/Sub**.
+    -   **Application Change:** The application must be modified to publish an event to a Cloud Pub/Sub topic when a teacher schedules an exam. The event payload should contain the number of students and the start time.
+    -   **KEDA Scaler:** A KEDA `ScaledObject` is created and configured with the `gcp-pubsub` scaler, pointing to the appropriate subscription. KEDA will monitor the number of messages in the subscription and scale the pods accordingly. For more advanced logic (e.g., scaling based on a value in the message payload), a custom metrics adapter service would be used, as described in the generic Kubernetes implementation.
+
+4.  **Graceful, Session-Aware Scale-Down:**
+    -   The implementation is identical to the generic Kubernetes approach.
+    -   The application pods must be enhanced with more intelligent readiness probes and a `preStop` lifecycle hook.
+    -   The readiness probe should fail if the pod has active sessions, preventing the GKE Ingress from sending it new traffic.
+    -   The `preStop` hook gives the pod time to wait for existing sessions to complete before Kubernetes terminates it. This ensures no student is cut off mid-exam during a scale-down event.
