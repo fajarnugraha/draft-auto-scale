@@ -55,7 +55,9 @@ The Kubernetes HPA has built-in cooldown/stabilization logic. The `--horizontal-
 - **API and CLI Access:** The primary way to interact with a Kubernetes cluster is via the **`kubectl` CLI** and the **Kubernetes API**, which provide comprehensive control over all cluster resources.
 - **Monitoring and Logging:** While Kubernetes itself provides basic logging via `kubectl logs`, a complete monitoring and logging solution typically involves open-source tools like **Prometheus** for metrics, **Grafana** for visualization, and a logging stack like **Fluentd**, **Elasticsearch**, and **Kibana (EFK)**. These tools provide the necessary visibility into auto-scaling events and application behavior.
 
-## 4. Case Study: Online Shop Flash Sale
+## 4. Case Studies
+
+### 4.1. Online Shop Flash Sale
 
 This section details how to implement the flash sale use case using Kubernetes.
 
@@ -86,31 +88,7 @@ This section details how to implement the flash sale use case using Kubernetes.
         - `maxReplicas: 20`
     - The HPA will then begin to scale the application down to the normal operational level. The Cluster Autoscaler will subsequently see the underutilized nodes and terminate them to reduce costs.
 
-## 5. Testing and Monitoring
-
-### 5.1. Load Generation
-
-To validate the HPA and Cluster Autoscaler configurations, a load generator is essential. A modern tool like **k6** is recommended.
-
-Refer to the guide on [Load Testing with k6](../load-generator/k6.md) for a detailed example of how to create a test script and generate traffic.
-
-### 5.2. Monitoring Dashboard
-
-For a generic Kubernetes cluster, the standard for monitoring is the combination of **Prometheus** and **Grafana**.
-
--   **Prometheus:** An open-source monitoring system that scrapes metrics from configured endpoints. It should be configured to scrape metrics from:
-    -   The **Kubernetes Metrics Server** (for CPU/Memory).
-    -   An **Ingress Controller** (for RPS/latency).
-    -   The applications themselves (if they expose custom metrics).
--   **Grafana:** An open-source visualization tool used to create dashboards from data sources like Prometheus.
-
-A recommended Grafana dashboard for monitoring auto-scaling would include these panels:
--   **HPA Target Metric vs. Current Metric:** A graph showing the current average CPU utilization across all pods versus the target utilization (e.g., 60%). This is the most critical view to see *why* scaling is happening.
--   **Pod Count (Replicas):** A graph showing the desired number of replicas set by the HPA versus the actual number of running replicas.
--   **Requests Per Second (RPS):** If scaling on a request-based metric, a graph showing the RPS from the Ingress controller.
--   **Cluster Node Count:** A graph showing the number of nodes in the cluster, which helps visualize the Cluster Autoscaler's activity.
-
-## 6. Case Study: Online Test Platform
+### 4.2. Online Test Platform
 
 This use case requires a more sophisticated setup than the flash sale due to its stateful nature and the need to handle unpredictable, tenant-driven events.
 
@@ -134,3 +112,27 @@ This use case requires a more sophisticated setup than the flash sale due to its
     -   **Application Health Checks:** The application pods must be enhanced with more intelligent health checks. The pod should report itself as "unhealthy" or "unready" if it has active test sessions, even if the test's official end time has passed.
     -   **Pre-Stop Hook:** A `preStop` lifecycle hook should be configured for the container. This hook would trigger a script that waits for all active sessions to complete before allowing the pod to be terminated. This prevents Kubernetes from forcefully killing a pod while a student is still submitting their exam.
     -   By combining these techniques, the HPA can safely scale down the application, as pods will only be terminated after they have confirmed that all user sessions within them are complete.
+
+## 5. Testing and Monitoring
+
+### 5.1. Load Generation
+
+To validate the HPA and Cluster Autoscaler configurations, a load generator is essential. A modern tool like **k6** is recommended.
+
+Refer to the guide on [Load Testing with k6](../load-generator/k6.md) for a detailed example of how to create a test script and generate traffic.
+
+### 5.2. Monitoring Dashboard
+
+For a generic Kubernetes cluster, the standard for monitoring is the combination of **Prometheus** and **Grafana**.
+
+-   **Prometheus:** An open-source monitoring system that scrapes metrics from configured endpoints. It should be configured to scrape metrics from:
+    -   The **Kubernetes Metrics Server** (for CPU/Memory).
+    -   An **Ingress Controller** (for RPS/latency).
+    -   The applications themselves (if they expose custom metrics).
+-   **Grafana:** An open-source visualization tool used to create dashboards from data sources like Prometheus.
+
+A recommended Grafana dashboard for monitoring auto-scaling would include these panels:
+-   **HPA Target Metric vs. Current Metric:** A graph showing the current average CPU utilization across all pods versus the target utilization (e.g., 60%). This is the most critical view to see *why* scaling is happening.
+-   **Pod Count (Replicas):** A graph showing the desired number of replicas set by the HPA versus the actual number of running replicas.
+-   **Requests Per Second (RPS):** If scaling on a request-based metric, a graph showing the RPS from the Ingress controller.
+-   **Cluster Node Count:** A graph showing the number of nodes in the cluster, which helps visualize the Cluster Autoscaler's activity.
