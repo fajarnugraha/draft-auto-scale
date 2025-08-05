@@ -13,15 +13,11 @@ The primary focus of these requirements is on application-level scaling using co
 
 ### 1.2. Scaling Dimensions
 
-The auto-scaling mechanism should support both horizontal and vertical scaling.
+The auto-scaling mechanism should support horizontal scaling.
 
 - **Horizontal Scaling:**
     - The platform must be able to automatically increase or decrease the number of container instances (replicas) based on demand.
     - This is the primary mechanism for scaling stateless applications.
-
-- **Vertical Scaling:**
-    - The platform should provide a mechanism to automatically adjust the resources (CPU, memory) allocated to a container instance.
-    - This can be useful for stateful applications or applications with specific resource requirements.
 
 ### 1.3. Scaling Triggers
 
