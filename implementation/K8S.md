@@ -85,3 +85,27 @@ This section details how to implement the flash sale use case using Kubernetes.
         - `minReplicas: 5`
         - `maxReplicas: 20`
     - The HPA will then begin to scale the application down to the normal operational level. The Cluster Autoscaler will subsequently see the underutilized nodes and terminate them to reduce costs.
+
+## 5. Testing and Monitoring
+
+### 5.1. Load Generation
+
+To validate the HPA and Cluster Autoscaler configurations, a load generator is essential. A modern tool like **k6** is recommended.
+
+Refer to the guide on [Load Testing with k6](./load-generator/k6.md) for a detailed example of how to create a test script and generate traffic.
+
+### 5.2. Monitoring Dashboard
+
+For a generic Kubernetes cluster, the standard for monitoring is the combination of **Prometheus** and **Grafana**.
+
+-   **Prometheus:** An open-source monitoring system that scrapes metrics from configured endpoints. It should be configured to scrape metrics from:
+    -   The **Kubernetes Metrics Server** (for CPU/Memory).
+    -   An **Ingress Controller** (for RPS/latency).
+    -   The applications themselves (if they expose custom metrics).
+-   **Grafana:** An open-source visualization tool used to create dashboards from data sources like Prometheus.
+
+A recommended Grafana dashboard for monitoring auto-scaling would include these panels:
+-   **HPA Target Metric vs. Current Metric:** A graph showing the current average CPU utilization across all pods versus the target utilization (e.g., 60%). This is the most critical view to see *why* scaling is happening.
+-   **Pod Count (Replicas):** A graph showing the desired number of replicas set by the HPA versus the actual number of running replicas.
+-   **Requests Per Second (RPS):** If scaling on a request-based metric, a graph showing the RPS from the Ingress controller.
+-   **Cluster Node Count:** A graph showing the number of nodes in the cluster, which helps visualize the Cluster Autoscaler's activity.

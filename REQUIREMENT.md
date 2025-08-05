@@ -71,4 +71,22 @@ This use case describes an online retail store preparing for a flash sale event.
     - **Reactive Scaling during the Event:** During the sale, the system must still be able to react to unexpected traffic spikes.
         - **Threshold:** A reactive scale-up should be triggered if the average CPU utilization exceeds a sensible threshold (e.g., 75%).
         - **Time-to-React:** The time from when the threshold is breached to when new container instances are ready to serve traffic must be very short (e.g., under 2 minutes) to prevent service degradation.
-    - **Scheduled Scale-Down:** To optimize costs, the system must automatically scale down to normal levels after the event is over.
+        - **Scheduled Scale-Down:** To optimize costs, the system must automatically scale down to normal levels after the event is over.
+
+## 5. Testing and Monitoring
+
+To ensure the auto-scaling system is reliable and performs as expected, the platform must provide robust testing and monitoring capabilities.
+
+### 5.1. Load Generation
+
+- **Requirement:** A load generation tool must be used to simulate various traffic patterns (e.g., sudden spikes, gradual increases) to validate that the auto-scaling triggers and policies work correctly.
+- **Implementation:** The implementation guides should refer to a specific, modern load generation tool. See `implementation/load-generator/` for examples.
+
+### 5.2. Monitoring Dashboard
+
+- **Requirement:** A real-time monitoring dashboard is required to visualize the state of the auto-scaling system.
+- **Key Metrics:** The dashboard must display, at a minimum:
+    - The number of active container instances (pods/replicas).
+    - The current value of the metric driving the scaling decision (e.g., average CPU utilization, requests per second).
+    - The scaling metric's target threshold.
+    - Historical data for these metrics to analyze scaling behavior over time.

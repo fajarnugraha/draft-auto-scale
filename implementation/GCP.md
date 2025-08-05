@@ -53,3 +53,26 @@ The HPA in GKE has built-in, configurable cooldown and stabilization periods. Th
 - **Declarative Configuration:** All GKE and Kubernetes resources, including Deployments and HPAs, are configured using declarative **YAML** files, fully supporting infrastructure-as-code (IaC) practices.
 - **API and CLI Access:** GCP provides the **`gcloud` CLI** for managing GKE clusters, and Kubernetes provides the **`kubectl` CLI** for managing workloads within the cluster. Both are backed by comprehensive REST APIs.
 - **Monitoring and Logging:** **Google Cloud's operations suite (formerly Stackdriver)** provides deep, out-of-the-box integration with GKE. It automatically collects logs, events, and metrics, including detailed information on all auto-scaling activities, for comprehensive monitoring and auditing.
+
+## 4. Case Study: Online Shop Flash Sale
+The implementation for the flash sale case study on GKE is identical to the generic Kubernetes implementation. It uses a combination of `CronJob` resources for proactive scheduled scaling and the standard `HorizontalPodAutoscaler` for reactive scaling during the event.
+
+Refer to the [generic Kubernetes implementation](./K8S.md#4-case-study-online-shop-flash-sale) for the detailed steps.
+
+## 5. Testing and Monitoring
+
+### 5.1. Load Generation
+To validate the HPA and Cluster Autoscaler configurations on GKE, a load generator is essential. A modern tool like **k6** is recommended.
+
+Refer to the guide on [Load Testing with k6](./load-generator/k6.md) for a detailed example of how to create a test script and generate traffic against your GKE service.
+
+### 5.2. Monitoring Dashboard
+GKE is deeply integrated with **Google Cloud's operations suite** (formerly Stackdriver), which provides powerful monitoring and dashboarding capabilities out of the box.
+
+A recommended dashboard in **Cloud Monitoring** for observing GKE auto-scaling would be configured with these widgets:
+-   **HPA Target vs. Current Metric:** A chart showing the current average CPU utilization from the GKE container metrics versus the HPA's target utilization.
+-   **Pod Count (Replicas):** A chart displaying the number of available pods in the deployment, which directly visualizes the result of HPA's scaling decisions.
+-   **Requests Per Second (RPS):** If scaling on traffic, a chart showing the RPS metric from the Cloud Load Balancer.
+-   **Node Count:** A chart showing the number of nodes in the GKE cluster's node pool, which visualizes the GKE Cluster Autoscaler's activity.
+
+These metrics are available by default when GKE monitoring is enabled, making it straightforward to build a comprehensive dashboard.
