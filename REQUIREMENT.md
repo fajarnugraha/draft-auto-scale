@@ -56,3 +56,19 @@ The auto-scaling system must be able to react quickly to changes in load to ensu
 - **Declarative Configuration:** The auto-scaling policies should be definable in a declarative format (e.g., YAML, JSON) to enable infrastructure-as-code practices.
 - **API and CLI Access:** The platform must provide a comprehensive API and command-line interface (CLI) for managing auto-scaling configurations.
 - **Monitoring and Logging:** The platform must provide detailed monitoring and logging of auto-scaling events to allow for auditing and troubleshooting.
+
+## 4. Case Examples
+
+### 4.1. Online Shop Flash Sale
+
+This use case describes an online retail store preparing for a flash sale event.
+
+- **Scenario:** A flash sale is scheduled to start at a specific time (e.g., Friday at 8:00 PM) and last for one hour. The expected traffic is 100 times the normal load.
+- **Requirement:** The system must handle the massive, sudden surge in traffic without impacting user experience. Customers should not experience slow loading times or be unable to access the site.
+
+- **Implementation Requirements:**
+    - **Proactive Scheduled Scaling:** The platform must support a scheduled scaling mechanism to pre-warm the environment. The number of container instances should be significantly increased *before* the sale begins to handle the anticipated load.
+    - **Reactive Scaling during the Event:** During the sale, the system must still be able to react to unexpected traffic spikes.
+        - **Threshold:** A reactive scale-up should be triggered if the average CPU utilization exceeds a sensible threshold (e.g., 75%).
+        - **Time-to-React:** The time from when the threshold is breached to when new container instances are ready to serve traffic must be very short (e.g., under 2 minutes) to prevent service degradation.
+    - **Scheduled Scale-Down:** To optimize costs, the system must automatically scale down to normal levels after the event is over.
