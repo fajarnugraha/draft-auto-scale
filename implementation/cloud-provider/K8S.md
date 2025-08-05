@@ -92,7 +92,7 @@ This section details how to implement the flash sale use case using Kubernetes.
 
 To validate the HPA and Cluster Autoscaler configurations, a load generator is essential. A modern tool like **k6** is recommended.
 
-Refer to the guide on [Load Testing with k6](./load-generator/k6.md) for a detailed example of how to create a test script and generate traffic.
+Refer to the guide on [Load Testing with k6](../load-generator/k6.md) for a detailed example of how to create a test script and generate traffic.
 
 ### 5.2. Monitoring Dashboard
 

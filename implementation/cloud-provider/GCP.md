@@ -64,7 +64,7 @@ Refer to the [generic Kubernetes implementation](./K8S.md#4-case-study-online-sh
 ### 5.1. Load Generation
 To validate the HPA and Cluster Autoscaler configurations on GKE, a load generator is essential. A modern tool like **k6** is recommended.
 
-Refer to the guide on [Load Testing with k6](./load-generator/k6.md) for a detailed example of how to create a test script and generate traffic against your GKE service.
+Refer to the guide on [Load Testing with k6](../load-generator/k6.md) for a detailed example of how to create a test script and generate traffic against your GKE service.
 
 ### 5.2. Monitoring Dashboard
 GKE is deeply integrated with **Google Cloud's operations suite** (formerly Stackdriver), which provides powerful monitoring and dashboarding capabilities out of the box.
