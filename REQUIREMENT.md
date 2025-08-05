@@ -1,5 +1,21 @@
 # Generic Requirements for Cloud Provider Auto Scaling
 
+## Table of Contents
+- [1. Application Scaling](#1-application-scaling)
+  - [1.1. Containerization](#11-containerization)
+  - [1.2. Scaling Dimensions](#12-scaling-dimensions)
+  - [1.3. Scaling Triggers](#13-scaling-triggers)
+- [2. Scaling Performance](#2-scaling-performance)
+  - [2.1. Time-to-Scale](#21-time-to-scale)
+  - [2.2. Cooldown Periods](#22-cooldown-periods)
+- [3. Configuration and Management](#3-configuration-and-management)
+- [4. Case Examples](#4-case-examples)
+  - [4.1. Online Shop Flash Sale](#41-online-shop-flash-sale)
+  - [4.2. Online Test Platform](#42-online-test-platform)
+- [5. Testing and Monitoring](#5-testing-and-monitoring)
+  - [5.1. Load Generation](#51-load-generation)
+  - [5.2. Monitoring Dashboard](#52-monitoring-dashboard)
+
 This document outlines the generic requirements for a cloud provider to support auto-scaling features for containerized applications. The requirements are based on existing features in major cloud providers and are intended to be cloud-agnostic.
 
 ## 1. Application Scaling
