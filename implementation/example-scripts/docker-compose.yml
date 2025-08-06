@@ -1,0 +1,22 @@
+services:
+  app-server-1:
+    build: ./app-server
+    environment:
+      - LOAD_CPU_ITERATIONS=0
+      - LOAD_MEM_MB=1
+    # No ports exposed to the host, communication is via the Docker network.
+
+  app-server-2:
+    build: ./app-server
+    environment:
+      - LOAD_CPU_ITERATIONS=0
+      - LOAD_MEM_MB=1
+
+  nginx:
+    build: ./nginx
+    ports:
+      # Expose port 8080 on the host and map it to port 80 in the container.
+      - "8080:80"
+    depends_on:
+      - app-server-1
+      - app-server-2

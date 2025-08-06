@@ -1,95 +1,101 @@
 package main
 
-/*
-#include <unistd.h>
-*/
-import "C"
 import (
 	"fmt"
-	"io/ioutil"
 	"log"
 	"os"
+	"os/exec"
 	"strconv"
 	"strings"
 	"time"
 )
 
-// getClockTicks returns the number of clock ticks per second.
-func getClockTicks() float64 {
-	// sysconf(_SC_CLK_TCK) is the standard C library way to get this value.
-	return float64(C.sysconf(C._SC_CLK_TCK))
+// parseDockerStats runs `docker stats` for a given container ID and extracts CPU & Memory.
+func parseDockerStats(containerID string) (float64, float64) {
+	// --no-stream: Get a single snapshot.
+	// --format: Specify a custom output format for easy parsing.
+	cmd := exec.Command("docker", "stats", "--no-stream", "--format", "{{.CPUPerc}},{{.MemUsage}}", containerID)
+	output, err := cmd.Output()
+	if err != nil {
+		// This will happen if the container stops. Return 0 for both values.
+		return 0, 0
+	}
+
+	// Example output: "150.55%,12.34MiB / 1.95GiB"
+	parts := strings.Split(strings.TrimSpace(string(output)), ",")
+	if len(parts) != 2 {
+		return 0, 0
+	}
+
+	// ---
+	// CPU Parsing
+	// ---
+	// Remove the '%' suffix and parse.
+	cpuPercentStr := strings.TrimSuffix(parts[0], "%")
+	cpuPercent, err := strconv.ParseFloat(cpuPercentStr, 64)
+	if err != nil {
+		cpuPercent = 0
+	}
+	// The result from docker stats is a percentage of all cores.
+	// e.g., 150% on a 2-core machine means 1.5 cores are being used.
+	cpuCores := cpuPercent / 100.0
+
+	// ---
+	// Memory Parsing
+	// ---
+	// Example: "12.34MiB / 1.95GiB" -> we only need the first part.
+	memParts := strings.Fields(parts[1])
+	if len(memParts) == 0 {
+		return cpuCores, 0
+	}
+	memStr := memParts[0]
+	var memMB float64
+	// It could be in MiB, GiB, KiB etc. We'll parse it.
+	if strings.Contains(memStr, "MiB") {
+		val, _ := strconv.ParseFloat(strings.TrimSuffix(memStr, "MiB"), 64)
+		memMB = val
+	} else if strings.Contains(memStr, "GiB") {
+		val, _ := strconv.ParseFloat(strings.TrimSuffix(memStr, "GiB"), 64)
+		memMB = val * 1024
+	} else if strings.Contains(memStr, "KiB") {
+		val, _ := strconv.ParseFloat(strings.TrimSuffix(memStr, "KiB"), 64)
+		memMB = val / 1024
+	}
+
+	return cpuCores, memMB
 }
 
 func main() {
 	if len(os.Args) < 2 {
-		log.Fatal("Usage: ./resource-monitor <PID>")
+		log.Fatal("Usage: ./resource-monitor <containerID1> <containerID2> ...")
 	}
-	pid := os.Args[1]
+	containerIDs := os.Args[1:]
 
-	// Get system clock ticks per second (jiffies)
-	ticksPerSecond := getClockTicks()
-	if ticksPerSecond <= 0 {
-		log.Println("Warning: Could not determine system clock ticks. Defaulting to 100.")
-		ticksPerSecond = 100 // Fallback to a common default
-	}
-
-	var lastTotalCPUTime float64
-	lastSampleTime := time.Now()
-
-	fmt.Println("Timestamp,CPUCores,MemoryMB")
+	fmt.Println("Timestamp,TotalCPUCores,TotalMemoryMB")
 
 	for {
-		// --- Memory Measurement ---
-		memPath := fmt.Sprintf("/proc/%s/status", pid)
-		memBytes, err := ioutil.ReadFile(memPath)
-		if err != nil {
-			// Process likely terminated, exit gracefully
+		var totalCPU float64
+		var totalMem float64
+		activeContainers := 0
+
+		for _, id := range containerIDs {
+			cpu, mem := parseDockerStats(id)
+			if cpu > 0 || mem > 0 {
+				activeContainers++
+			}
+			totalCPU += cpu
+			totalMem += mem
+		}
+
+		// If all containers have stopped, exit the monitor.
+		if activeContainers == 0 {
 			break
 		}
-		memLines := strings.Split(string(memBytes), "\n")
-		var rssMB float64
-		for _, line := range memLines {
-			if strings.HasPrefix(line, "VmRSS:") {
-				fields := strings.Fields(line)
-				if len(fields) >= 2 {
-					rssKB, _ := strconv.ParseFloat(fields[1], 64)
-					rssMB = rssKB / 1024
-				}
-				break
-			}
-		}
 
-		// --- CPU Measurement ---
-		statPath := fmt.Sprintf("/proc/%s/stat", pid)
-		statBytes, err := ioutil.ReadFile(statPath)
-		if err != nil {
-			break // Process likely terminated
-		}
-		statFields := strings.Fields(string(statBytes))
-		if len(statFields) < 15 {
-			// stat file is not as expected, skip this sample
-			continue
-		}
-		utime, _ := strconv.ParseFloat(statFields[13], 64)
-		stime, _ := strconv.ParseFloat(statFields[14], 64)
-		totalCPUTime := utime + stime
-
-		// --- Calculation ---
-		currentTime := time.Now()
-		elapsedWallTime := currentTime.Sub(lastSampleTime).Seconds()
-		elapsedCPUTime := (totalCPUTime - lastTotalCPUTime) / ticksPerSecond
-
-		cpuCores := 0.0
-		if elapsedWallTime > 0 {
-			cpuCores = elapsedCPUTime / elapsedWallTime
-		}
-
-		// --- Output ---
-		fmt.Printf("%s,%.4f,%.2f\n", currentTime.Format(time.RFC3339), cpuCores, rssMB)
-
-		// --- Update for next iteration ---
-		lastTotalCPUTime = totalCPUTime
-		lastSampleTime = currentTime
+		// ---
+		// Output
+		// ---
+		fmt.Printf("%s,%.4f,%.2f\n", time.Now().Format(time.RFC3339), totalCPU, totalMem)
 
 		time.Sleep(1 * time.Second)
 	}
