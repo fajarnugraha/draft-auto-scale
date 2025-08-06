@@ -88,7 +88,7 @@ else
     echo "Resource Monitor started with PID: $MONITOR_PID, logging to $LOG_FILE"
 
     # 4. Run Load Test
-    print_header "RUNNING k6 LOAD TEST (1000 RPS for 60s)"
+    print_header "RUNNING k6 LOAD TEST (100 RPS for 10s)"
     (cd "$LOAD_GEN_DIR" && ../bin/k6 run k6-script.js --summary-export="../$K6_SUMMARY_FILE") > run_test.log 2>&1
     K6_EXIT_CODE=$?
     if [ $K6_EXIT_CODE -ne 0 ]; then

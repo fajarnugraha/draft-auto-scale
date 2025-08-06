@@ -1,5 +1,9 @@
 package main
 
+/*
+#include <unistd.h>
+*/
+import "C"
 import (
 	"fmt"
 	"io/ioutil"
@@ -10,6 +14,12 @@ import (
 	"time"
 )
 
+// getClockTicks returns the number of clock ticks per second.
+func getClockTicks() float64 {
+	// sysconf(_SC_CLK_TCK) is the standard C library way to get this value.
+	return float64(C.sysconf(C._SC_CLK_TCK))
+}
+
 func main() {
 	if len(os.Args) < 2 {
 		log.Fatal("Usage: ./resource-monitor <PID>")
@@ -17,7 +27,11 @@ func main() {
 	pid := os.Args[1]
 
 	// Get system clock ticks per second (jiffies)
-	ticksPerSecond := float64(100) // Default for most Linux systems
+	ticksPerSecond := getClockTicks()
+	if ticksPerSecond <= 0 {
+		log.Println("Warning: Could not determine system clock ticks. Defaulting to 100.")
+		ticksPerSecond = 100 // Fallback to a common default
+	}
 
 	var lastTotalCPUTime float64
 	lastSampleTime := time.Now()
@@ -52,6 +66,10 @@ func main() {
 			break // Process likely terminated
 		}
 		statFields := strings.Fields(string(statBytes))
+		if len(statFields) < 15 {
+			// stat file is not as expected, skip this sample
+			continue
+		}
 		utime, _ := strconv.ParseFloat(statFields[13], 64)
 		stime, _ := strconv.ParseFloat(statFields[14], 64)
 		totalCPUTime := utime + stime
@@ -60,7 +78,7 @@ func main() {
 		currentTime := time.Now()
 		elapsedWallTime := currentTime.Sub(lastSampleTime).Seconds()
 		elapsedCPUTime := (totalCPUTime - lastTotalCPUTime) / ticksPerSecond
-		
+
 		cpuCores := 0.0
 		if elapsedWallTime > 0 {
 			cpuCores = elapsedCPUTime / elapsedWallTime
