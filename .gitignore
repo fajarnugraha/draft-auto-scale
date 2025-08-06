@@ -1,0 +1,3 @@
+# Log and summary files from testing scripts
+implementation/example-scripts/*.log
+implementation/example-scripts/*.txt
