@@ -1,5 +1,2 @@
-# Log files
-resource_usage.log
-k6_summary.txt
-app-server.log
-run_test.log
+# Ignore downloaded binaries and local tools
+/bin/

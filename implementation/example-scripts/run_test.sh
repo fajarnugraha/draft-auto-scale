@@ -122,7 +122,7 @@ echo ""
 # Process k6 Summary
 echo "--- k6 Performance Summary ---"
 if [ -f "$K6_SUMMARY_FILE" ]; then
-    ./"$BIN_DIR"/jq -r '
+    ./bin/jq -r '
         .metrics |
         {
             "HTTP Requests": .http_reqs.count,
