@@ -2,9 +2,9 @@ import http from 'k6/http';
 import { check, sleep } from 'k6';
 import { Trend } from 'k6/metrics';
 
-const VUS = 100;
+const VUS = 1000;
 const DURATION = '10s';
-const RPS = 100;
+const RPS = 1000;
 
 // Define custom trends for each endpoint
 const browseTrend = new Trend('http_req_duration_browse');

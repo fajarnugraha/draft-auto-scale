@@ -68,8 +68,8 @@ else
         sleep 1
     fi
     # Start the server in the background with high load
-    echo "Starting app-server with LOAD_CPU_ITERATIONS=0 and LOAD_MEM_MB=800"
-    LOAD_CPU_ITERATIONS=0 LOAD_MEM_MB=800 ./"$APP_SERVER_DIR"/app-server > app-server.log 2>&1 &
+    echo "Starting app-server with LOAD_CPU_ITERATIONS=0 and LOAD_MEM_MB=1"
+    LOAD_CPU_ITERATIONS=0 LOAD_MEM_MB=1 ./"$APP_SERVER_DIR"/app-server > app-server.log 2>&1 &
     APP_SERVER_PID=$(pgrep -f app-server)
     # Wait a moment for the server to initialize
     sleep 2
@@ -88,7 +88,7 @@ else
     echo "Resource Monitor started with PID: $MONITOR_PID, logging to $LOG_FILE"
 
     # 4. Run Load Test
-    print_header "RUNNING k6 LOAD TEST (100 RPS for 10s)"
+    print_header "RUNNING k6 LOAD TEST (1000 RPS for 10s)"
     (cd "$LOAD_GEN_DIR" && ../bin/k6 run k6-script.js --summary-export="../$K6_SUMMARY_FILE") > run_test.log 2>&1
     K6_EXIT_CODE=$?
     if [ $K6_EXIT_CODE -ne 0 ]; then
@@ -146,7 +146,12 @@ if [ -f "$K6_SUMMARY_FILE" ]; then
             "Submit Duration (p95)": .http_req_duration_submit."p(95)",
             "Submit Duration (avg)": .http_req_duration_submit.avg
         } |
-        to_entries | .[] | "\(.key): \(.value)"
+        to_entries | .[] |
+        if (.key | contains("Duration")) then
+            "\(.key) (ms): \(.value)"
+        else
+            "\(.key): \(.value)"
+        end
     ' "$K6_SUMMARY_FILE"
 else
     echo "k6 summary file not found."

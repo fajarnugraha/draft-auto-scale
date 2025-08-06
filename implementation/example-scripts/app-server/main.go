@@ -27,9 +27,7 @@ var (
 		MemMB         int
 	}
 
-	// memoryStore holds a pre-allocated slice of bytes to simulate memory usage
-	// without causing constant garbage collection.
-	memoryStore []byte
+	
 )
 
 // session represents a user session.
@@ -47,12 +45,15 @@ func simulateLoad(cpuIterations int, memMB int) {
 		_ = math.Sqrt(float64(i))
 	}
 
-	// 2. Memory Load: Access the pre-allocated slice to simulate usage.
-	if len(memoryStore) > 0 {
-		// Iterate through the slice to ensure it's paged into RAM.
-		for i := 0; i < len(memoryStore); i += 1024 { // Step by 1KB to be efficient
-			memoryStore[i] = byte(i % 256)
+	// 2. Memory Load: Allocate a new slice on each call to simulate dynamic memory usage.
+	if memMB > 0 {
+		// Allocate the memory.
+		tempStore := make([]byte, memMB*1024*1024)
+		// Iterate through the slice to ensure it's actually used and not optimized away.
+		for i := 0; i < len(tempStore); i += 1024 { // Step by 1KB to be efficient
+			tempStore[i] = byte(i % 256)
 		}
+		// The tempStore is now out of scope and will be garbage collected.
 	}
 }
 
@@ -227,11 +228,7 @@ func main() {
 		loadConfig.MemMB = 0 // Default to 0 if not set
 	}
 
-	// Pre-allocate memory store if configured
-	if loadConfig.MemMB > 0 {
-		log.Printf("Pre-allocating %d MB of memory...", loadConfig.MemMB)
-		memoryStore = make([]byte, loadConfig.MemMB*1024*1024)
-	}
+	
 
 
 	// The router is responsible for matching incoming requests to their corresponding handler.
@@ -251,7 +248,7 @@ func main() {
 	}
 
 	log.Printf("Server starting on port 8080...")
-	log.Printf("Load simulation settings: CPU Iterations=%d, Memory MB=%d", loadConfig.CPUIterations, loadConfig.MemMB)
+	log.Printf("Load simulation settings: CPU Iterations=%d, Memory MB per Request=%d", loadConfig.CPUIterations, loadConfig.MemMB)
 
 	if err := fasthttp.ListenAndServe(":8080", router); err != nil {
 		log.Fatalf("Could not start server: %s\n", err)
