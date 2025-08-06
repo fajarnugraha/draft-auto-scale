@@ -4,6 +4,22 @@ This document outlines how a generic, cloud-agnostic Kubernetes cluster can impl
 
 A standard Kubernetes installation provides the foundational components needed to create a powerful auto-scaling system. The implementation relies on core Kubernetes objects and some widely adopted open-source components.
 
+## Table of Contents
+- [1. Application Scaling](#1-application-scaling)
+  - [1.1. Containerization](#11-containerization)
+  - [1.2. Scaling Dimensions](#12-scaling-dimensions)
+  - [1.3. Scaling Triggers](#13-scaling-triggers)
+- [2. Scaling Performance](#2-scaling-performance)
+  - [2.1. Time-to-Scale](#21-time-to-scale)
+  - [2.2. Cooldown Periods](#22-cooldown-periods)
+- [3. Configuration and Management](#3-configuration-and-management)
+- [4. Case Studies](#4-case-studies)
+  - [4.1. Online Shop Flash Sale](#41-online-shop-flash-sale)
+  - [4.2. Online Test Platform](#42-online-test-platform)
+- [5. Testing and Monitoring](#5-testing-and-monitoring)
+  - [5.1. Load Generation](#51-load-generation)
+  - [5.2. Monitoring Dashboard](#52-monitoring-dashboard)
+
 ## 1. Application Scaling
 
 ### 1.1. Containerization
@@ -23,7 +39,10 @@ Kubernetes can scale workloads based on a variety of metrics, though some requir
     - To enable scaling on **CPU Utilization** and **Memory Utilization**, the **Kubernetes Metrics Server** must be installed in the cluster. This lightweight component collects resource metrics from each node's Kubelet and exposes them via the Metrics API, which the HPA uses to make scaling decisions.
 
 - **Request-Based Scaling:**
-    - **Request Count & Latency:** To scale on metrics like RPS or latency, a more advanced monitoring solution is required. A common approach is to use **Prometheus** to scrape metrics from an Ingress Controller (like NGINX or Traefik) and the **Prometheus Adapter for Kubernetes Custom Metrics**. This adapter exposes the scraped metrics to the HPA via the Custom Metrics API, allowing scaling decisions based on request-level data.
+    - To scale on metrics like **Request Count (RPS)**, **Request Latency**, or **Concurrent Connections**, a more advanced monitoring solution is required.
+    - **Implementation:** The standard approach is to use **Prometheus** to scrape detailed metrics from an Ingress Controller (like NGINX or Traefik) or directly from the application pods if they expose a metrics endpoint.
+    - The **Prometheus Adapter for Kubernetes Custom Metrics** is then installed. This adapter discovers metrics in Prometheus and exposes them to the HPA via the Custom Metrics API.
+    - For a metric like `concurrent_connections`, the application itself or the Ingress controller would need to expose this data to be scraped by Prometheus.
 
 - **Schedule-Based Scaling:**
     - This can be achieved using a standard Kubernetes **CronJob**. The CronJob can be scheduled to run at any desired time and can execute a `kubectl` command to patch the `minReplicas` and `maxReplicas` values of an HPA object, effectively creating a scheduled scaling policy.
@@ -59,59 +78,64 @@ The Kubernetes HPA has built-in cooldown/stabilization logic. The `--horizontal-
 
 ### 4.1. Online Shop Flash Sale
 
-This section details how to implement the flash sale use case using Kubernetes.
+This section details how to implement the flash sale use case using Kubernetes, combining scheduled and reactive scaling.
 
 - **Normal Operation:**
-    - An HPA is configured for the web application's Deployment.
+    - An HPA is configured for the web application's Deployment. It uses multiple metrics for a robust policy.
     - `minReplicas: 5`
     - `maxReplicas: 20`
-    - `targetCPUUtilizationPercentage: 60`
+    - `metrics:`
+        - `type: Resource`
+        - `resource:`
+            - `name: cpu`
+            - `targetAverageUtilization: 60`
+        - `type: Pods`
+        - `pods:`
+            - `metricName: rps` // requests-per-second
+            - `targetAverageValue: 100`
 
 ### Implementation Steps
 
 1.  **Proactive Scheduled Scaling (Scale-Up):**
     - A **CronJob** is created to pre-warm the environment. It is scheduled to run 30 minutes before the sale starts (e.g., Friday at 7:30 PM).
-    - The CronJob executes a `kubectl patch` command to update the HPA resource.
-    - It modifies the HPA to handle the expected 100x load, setting a much higher baseline for the number of pods.
-        - `minReplicas: 400`  *(This ensures a large number of pods are ready immediately)*
-        - `maxReplicas: 800`  *(This provides headroom for unexpected surges beyond the estimate)*
+    - The CronJob executes a `kubectl patch` command to update the HPA resource, setting a much higher baseline for the number of pods.
+        - `minReplicas: 400`  *(Ensures a large number of pods are ready immediately)*
+        - `maxReplicas: 800`  *(Provides headroom for unexpected surges)*
 
 2.  **Reactive Scaling During the Event:**
-    - The existing HPA continues to function during the sale, but with the new replica counts.
-    - If the CPU load across the 400+ pods still exceeds the `targetCPUUtilizationPercentage` (e.g., 60%), the HPA will automatically scale out further, up to the new maximum of 800 pods.
+    - The existing HPA continues to function during the sale, but with the new replica counts and the same metric targets (e.g., 60% CPU, 100 RPS).
+    - If the load across the 400+ pods exceeds *any* of the defined thresholds, the HPA will automatically scale out further, up to the new maximum of 800 pods.
     - **Cluster Scaling:** A properly configured **Cluster Autoscaler** is crucial. It will see the large number of `Pending` pods created by the CronJob and HPA and will start provisioning new nodes in the cluster to accommodate them. This node scaling must complete before the sale begins.
 
 3.  **Scheduled Scale-Down:**
     - A second **CronJob** is created to run after the sale is over (e.g., Friday at 9:05 PM).
-    - This job patches the HPA again, returning its values to the normal, non-sale configuration.
-        - `minReplicas: 5`
-        - `maxReplicas: 20`
-    - The HPA will then begin to scale the application down to the normal operational level. The Cluster Autoscaler will subsequently see the underutilized nodes and terminate them to reduce costs.
+    - This job patches the HPA again, returning its values to the normal, non-sale configuration (`minReplicas: 5`, `maxReplicas: 20`).
+    - The HPA will then begin to scale the application down. The Cluster Autoscaler will subsequently see the underutilized nodes and terminate them to reduce costs.
 
 ### 4.2. Online Test Platform
 
-This use case requires a more sophisticated setup than the flash sale due to its stateful nature and the need to handle unpredictable, tenant-driven events.
+This use case requires a more sophisticated setup due to its stateful nature and unpredictable, tenant-driven events. The key is to scale based on active sessions, which is best measured by **concurrent connections**.
 
 ### Implementation Steps
 
 1.  **Session Persistence (Sticky Sessions):**
-    -   This is a critical prerequisite. The **Ingress Controller** (e.g., NGINX, Traefik, HAProxy) must be configured to provide session affinity. This is often done using a cookie-based approach. For example, the Ingress object would be annotated to instruct the controller to set a cookie on the user's first visit and then use that cookie to route all subsequent requests to the same pod.
+    -   This is a critical prerequisite. The **Ingress Controller** (e.g., NGINX, Traefik) must be configured for session affinity, typically using a cookie. This ensures a student is always routed to the same pod.
 
 2.  **Scenario 1: Predictable, Coordinated Event:**
-    -   The implementation is identical to the flash sale use case. A **CronJob** is used to proactively patch the HPA resource with a higher `minReplicas` count before the event begins, and a second CronJob scales it back down afterward.
+    -   The implementation is identical to the flash sale use case. A **CronJob** proactively patches the HPA to a higher `minReplicas` count before the event. The primary scaling metric would be `concurrent_connections` instead of RPS.
 
 3.  **Scenario 2: Unpredictable, Tenant-Driven Event:**
     -   This requires an event-driven approach using **KEDA**.
-    -   **Application Change:** The application must be modified to publish an event to a message broker (e.g., RabbitMQ, Kafka) when a teacher schedules an exam. The event payload should contain the number of students and the start time.
-    -   **KEDA Scaler:** A KEDA `ScaledObject` is created. Instead of monitoring CPU, it is configured with a scaler for the message broker (e.g., a `rabbitmq` scaler).
-    -   **Custom Logic:** A separate small service (sometimes called a "metrics adapter" or "scaler service") is needed. This service consumes the `exam_scheduled` events and exposes a simple metric that KEDA can poll (e.g., `active_exams` or `pending_student_count`).
-    -   **Scaling Action:** KEDA polls this service. When it sees that a large exam is scheduled to start soon, it drives the HPA to scale up the number of pods proactively, just in time for the event.
+    -   **Application Change:** The application must publish an `exam_scheduled` event to a message broker (e.g., RabbitMQ, Kafka) when a teacher creates a test.
+    -   **KEDA Scaler:** A KEDA `ScaledObject` is created. Instead of monitoring CPU, it is configured with a scaler for the message broker.
+    -   **Custom Logic:** A separate "metrics adapter" service is needed. This service consumes the `exam_scheduled` events and exposes a metric that KEDA can poll (e.g., `pending_student_count`).
+    -   **Scaling Action:** KEDA polls this service. When it sees a large exam is scheduled, it drives the HPA to scale up the pods proactively, just in time.
 
 4.  **Graceful, Session-Aware Scale-Down:**
-    -   This is the most complex part. The default HPA behavior (scaling down after a 5-minute stabilization window) is not sufficient as it could terminate a pod with an active student session.
-    -   **Application Health Checks:** The application pods must be enhanced with more intelligent health checks. The pod should report itself as "unhealthy" or "unready" if it has active test sessions, even if the test's official end time has passed.
-    -   **Pre-Stop Hook:** A `preStop` lifecycle hook should be configured for the container. This hook would trigger a script that waits for all active sessions to complete before allowing the pod to be terminated. This prevents Kubernetes from forcefully killing a pod while a student is still submitting their exam.
-    -   By combining these techniques, the HPA can safely scale down the application, as pods will only be terminated after they have confirmed that all user sessions within them are complete.
+    -   This is the most complex part. The HPA must scale based on a metric that reflects active sessions, such as **concurrent connections**.
+    -   **Application Health Checks:** The application pods must be enhanced. A pod should report itself as "unready" if its concurrent connection count is greater than zero, preventing the Ingress from sending it new traffic.
+    -   **Pre-Stop Hook:** A `preStop` lifecycle hook should be configured for the container. This hook triggers a script that waits for all active sessions (i.e., for concurrent connections to drop to zero) to complete before allowing the pod to be terminated.
+    -   This combination ensures the HPA can safely scale down, as pods will only terminate after confirming all user sessions are complete.
 
 ## 5. Testing and Monitoring
 
@@ -127,12 +151,12 @@ For a generic Kubernetes cluster, the standard for monitoring is the combination
 
 -   **Prometheus:** An open-source monitoring system that scrapes metrics from configured endpoints. It should be configured to scrape metrics from:
     -   The **Kubernetes Metrics Server** (for CPU/Memory).
-    -   An **Ingress Controller** (for RPS/latency).
+    -   An **Ingress Controller** (for RPS, latency, concurrent connections).
     -   The applications themselves (if they expose custom metrics).
 -   **Grafana:** An open-source visualization tool used to create dashboards from data sources like Prometheus.
 
 A recommended Grafana dashboard for monitoring auto-scaling would include these panels:
--   **HPA Target Metric vs. Current Metric:** A graph showing the current average CPU utilization across all pods versus the target utilization (e.g., 60%). This is the most critical view to see *why* scaling is happening.
+-   **HPA Target Metric vs. Current Metric:** A graph showing the current average value for each scaling metric (e.g., CPU, RPS) versus its target. This is the most critical view to see *why* scaling is happening.
 -   **Pod Count (Replicas):** A graph showing the desired number of replicas set by the HPA versus the actual number of running replicas.
--   **Requests Per Second (RPS):** If scaling on a request-based metric, a graph showing the RPS from the Ingress controller.
+-   **Requests Per Second (RPS) & Concurrent Connections:** Graphs showing the key request-based metrics from the Ingress controller.
 -   **Cluster Node Count:** A graph showing the number of nodes in the cluster, which helps visualize the Cluster Autoscaler's activity.

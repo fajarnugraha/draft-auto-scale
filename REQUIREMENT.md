@@ -46,6 +46,7 @@ The auto-scaling system should be able to trigger scaling events based on a vari
 - **Request-Based Scaling:**
     - **Request Count:** Scale based on the number of incoming requests per second (RPS) to a load balancer or ingress controller.
     - **Request Latency:** Scale based on the average response time of the application.
+    - **Concurrent Connections:** Scale based on the number of active, concurrent connections to each container instance. This is a critical metric for stateful applications or services where session duration is more important than request rate.
 
 - **Schedule-Based Scaling:**
     - The platform must allow for scheduled scaling events to handle predictable traffic patterns (e.g., scaling up during business hours and down at night).
@@ -84,13 +85,13 @@ This use case describes an online retail store preparing for a flash sale event.
 
 - **Implementation Requirements:**
     - **Proactive Scheduled Scaling:** The platform must support a scheduled scaling mechanism to pre-warm the environment. The number of container instances should be significantly increased *before* the sale begins to handle the anticipated load.
-    - **Reactive Scaling during the Event:** During the sale, the system must still be able to react to unexpected traffic spikes.
-        - **Threshold:** A reactive scale-up should be triggered if the average CPU utilization exceeds a sensible threshold (e.g., 75%).
+    - **Reactive Scaling during the Event:** During the sale, the system must still be able to react to unexpected traffic spikes using a combination of resource and request-based metrics.
+        - **Thresholds:** A reactive scale-up should be triggered if the average CPU utilization exceeds a sensible threshold (e.g., 75%) **OR** if request-based metrics like `requests-per-second` or `concurrent_connections` per instance exceed their targets.
         - **Time-to-React:** The time from when the threshold is breached to when new container instances are ready to serve traffic must be very short (e.g., under 2 minutes) to prevent service degradation.
         - **Scheduled Scale-Down:** To optimize costs, the system must automatically scale down to normal levels after the event is over.
 
 - **Special Considerations:**
-    - **Threshold Rationale (75%):** This threshold provides a good balance. It indicates that the system is under significant load but leaves a 25% buffer to absorb momentary traffic spikes without immediately dropping requests, giving the autoscaler time to react.
+    - **Threshold Rationale (75%):** This threshold provides a good balance. It indicates that the system is under significant load but leaves a 25% buffer to absorb momentary traffic spikes without immediately dropping requests, giving the autoscaler time to react. Using multiple metrics (e.g., CPU and RPS) provides a more robust scaling decision.
     - **Time-to-React Rationale (2 minutes):** For a high-stakes, short-lived event like a flash sale, a rapid response is critical. A 2-minute window from detection to readiness is an aggressive but necessary goal to prevent user abandonment. It forces the use of optimized container images and a cluster configured for fast node provisioning.
     - **Scale-Down Rationale (Scheduled):** A reactive scale-down is not used because the event has a predictable end time. A scheduled scale-down is more efficient, as it can terminate the expensive, high-capacity resources immediately after the sale concludes, rather than waiting for traffic to naturally decrease and a cooldown period to pass.
 
@@ -105,11 +106,11 @@ This use case describes a multi-tenant online testing platform where individual 
 
 -   **Implementation Requirements:**
     -   **Scenario 1 (Predictable):** Must support **proactive, scheduled scaling** to have capacity ready before the known event begins. This is identical to the flash sale use case.
-    -   **Scenario 2 (Unpredictable):** Must support **event-driven scaling**. The system cannot rely on lagging indicators like CPU load. Instead, it must scale based on leading indicators from the application itself. For example, when an exam is created for a large number of students, the application should publish an `exam_scheduled` event, which an event-driven autoscaler can use to proactively scale up the necessary resources just in time.
+    -   **Scenario 2 (Unpredictable):** Must support **event-driven scaling**. The system cannot rely on lagging indicators like CPU load. Instead, it must scale based on leading, request-based indicators from the application itself, such as **concurrent connections**. For example, when an exam is created, the application should publish an `exam_scheduled` event, which an event-driven autoscaler can use to proactively scale up the necessary resources just in time.
 
 -   **Special Considerations:**
     -   **Session Persistence (Sticky Sessions):** This is the most critical difference from a stateless e-commerce site. A student's session is stateful. The platform's load balancer must be configured to ensure that a student is always routed to the same container instance for the entire duration of their test to avoid losing progress.
-    -   **Graceful, Session-Aware Scale-Down:** The system cannot simply terminate instances when a scheduled time ends. The scale-down process must be intelligent. It must not terminate an instance until it has verified that all active test sessions on that instance have been completed and submitted successfully. This may require a significant delay between the test's end time and the actual scaling down of resources.
+    -   **Graceful, Session-Aware Scale-Down:** The system cannot simply terminate instances when a scheduled time ends. The scale-down process must be intelligent and based on a metric like **concurrent connections**. It must not terminate an instance until it has verified that all active test sessions (i.e., connections) on that instance have been completed and submitted successfully. This may require a significant delay between the test's end time and the actual scaling down of resources.
 
 ## 5. Testing and Monitoring
 
