@@ -40,37 +40,37 @@ Two primary configurations are used for testing:
 ### A. Single-Process Testing
 - **Description:** A single `app-server` binary is run directly on the host machine.
 - **Purpose:** To understand the baseline performance and identify the vertical scaling limits of a single application instance.
-- **Orchestration:** The `run_test.sh` script handles the lifecycle of the `app-server` and the `resource-monitor` processes directly.
 
 ### B. Horizontally-Scaled Testing (Docker)
-- **Description:** A multi-container environment managed by `docker compose`.
-- **Purpose:** To validate that the application can scale horizontally and to test its performance in a more production-like, distributed environment.
-- **Orchestration:** The `run_test.sh` script acts as an orchestrator for `docker compose`, starting, stopping, and monitoring the containerized services.
+- **Description:** A multi-container environment managed by `docker compose`. The stack includes two `app-server` replicas and an Nginx load balancer.
+- **Purpose:** To validate that the application can scale horizontally and to analyze the performance of the entire system, including the overhead of the container network stack.
 
 ## 3. Core Components
 
 ### A. App Server (`app-server`)
-- **Memory Model:** The server uses a **dynamic, per-request memory allocation** model. For each incoming request, it allocates a small amount of memory (e.g., 1 MB) to simulate processing data, which is then garbage collected.
-- **Containerization:** A `Dockerfile` is provided to build the Go application into a minimal, production-ready Alpine Linux image.
+- **Memory Model:** The server uses a dynamic, per-request memory allocation model (1 MB per request) to simulate real-world memory churn.
+- **Containerization:** A `Dockerfile` is provided to build the Go application into a minimal Alpine Linux image.
 
 ### B. Load Generator (`k6`)
 - **Location:** `doc/implementation/example-scripts/load-generator/`
-- **File:** `k6-script.js`
-- **Logic:** The script is configured to simulate a specific number of virtual users (VUs) and requests per second (RPS). It targets `localhost:8080` for both test configurations. In the Docker setup, this port is mapped to the Nginx load balancer.
+- **Logic:** Simulates a configurable number of virtual users (VUs) and requests per second (RPS). It targets `localhost:8080`, which is mapped to the Nginx load balancer in the Docker setup.
 
-### C. Resource Monitor (`resource-monitor`)
-- **Location:** `doc/implementation/example-scripts/resource-monitor/`
-- **Logic:** This tool's behavior changes based on the test configuration:
-    1.  **Single-Process Mode:** It takes a Process ID (PID) as an argument and reads from the `/proc` filesystem to measure resource usage.
-    2.  **Docker Mode:** It is rewritten to take Docker container IDs as arguments. It then uses the `docker stats` command to get CPU and memory data, which it aggregates from all specified containers before printing a unified CSV output.
+### C. Resource Monitors
+Two separate monitoring applications are run to provide a complete picture of resource usage.
+
+1.  **Container Monitor (`resource-monitor`)**
+    -   **Target:** The `app-server` containers.
+    -   **Method:** Takes container IDs as arguments and uses `docker stats` to get CPU and memory data, which it aggregates and logs.
+
+2.  **System Monitor (`system-monitor.go`)**
+    -   **Target:** The entire host machine.
+    -   **Method:** Reads `/proc/stat` to calculate the total system-wide CPU usage across all processes (user, system, etc.), providing insight into the "infrastructure tax" of the test environment.
 
 ### D. Nginx Load Balancer (`nginx/`)
-- **Purpose:** Used exclusively in the Docker-based test configuration.
-- **Logic:** It performs simple round-robin load balancing, distributing incoming traffic from the `k6` client across the two `app-server` container replicas.
+- **Purpose:** Used exclusively in the Docker-based test configuration to perform round-robin load balancing across the two `app-server` replicas.
 
 ### E. Test Runner Script (`run_test.sh`)
-- **Location:** `doc/implementation/example-scripts/`
-- **Logic:** This is the primary entry point for all tests. It now contains logic to detect the desired test mode and orchestrate either the single-process run or the full `docker compose` lifecycle.
+- **Logic:** This is the primary entry point for all tests. It builds all Go applications and Docker images, starts the selected test environment, runs the `k6` load test, and aggregates results from all monitors.
 
     3.  **Memory Measurement:** It reads `/proc/<PID>/status` to get the `VmRSS` (Resident Set Size).
     4.  **Output:** It prints results in a clean, CSV format.

@@ -2,6 +2,7 @@
 
 # --- Configuration ---
 LOG_FILE="resource_usage.log"
+SYS_LOG_FILE="system_usage.log" # New log file for system stats
 K6_SUMMARY_FILE="k6_summary.txt"
 LOAD_GEN_DIR="load-generator"
 BIN_DIR="bin"
@@ -17,9 +18,12 @@ print_header() {
 cleanup() {
     print_header "CLEANUP"
     echo "Stopping all services..."
+    # Kill background monitors first
+    if [ -n "$MONITOR_PID" ]; then kill -9 "$MONITOR_PID" 2>/dev/null; fi
+    if [ -n "$SYS_MONITOR_PID" ]; then kill -9 "$SYS_MONITOR_PID" 2>/dev/null; fi
     # Use docker compose down to stop and remove containers, networks, and volumes.
     docker compose down -v --remove-orphans
-    rm -f "$LOG_FILE" "$K6_SUMMARY_FILE" "run_test.log"
+    rm -f "$LOG_FILE" "$SYS_LOG_FILE" "$K6_SUMMARY_FILE" "run_test.log"
     echo "Cleanup complete."
 }
 
@@ -34,10 +38,8 @@ print_header "SETTING UP LOCAL TOOLS"
 
 # 1. Build and Start Services
 print_header "BUILDING AND STARTING DOCKER SERVICES"
-# Start services in detached mode and build images if they don't exist.
 docker compose up --build -d || { echo "Docker Compose failed to start."; exit 1; }
 echo "Services started."
-# Wait a moment for services to initialize
 sleep 5
 
 # 2. Get App Server Container IDs
@@ -54,12 +56,20 @@ echo "Replica 1 ID: $APP_SERVER_1_ID"
 echo "Replica 2 ID: $APP_SERVER_2_ID"
 
 
-# 3. Build and Start Resource Monitor
-print_header "BUILDING AND STARTING RESOURCE MONITOR"
+# 3. Build and Start Resource Monitors
+print_header "BUILDING AND STARTING RESOURCE MONITORS"
 (cd resource-monitor && go build -o resource-monitor .) || { echo "Failed to build resource-monitor"; exit 1; }
+go build -o system-monitor system-monitor.go || { echo "Failed to build system-monitor"; exit 1; }
+
+# Start container monitor
 ./resource-monitor/resource-monitor "$APP_SERVER_1_ID" "$APP_SERVER_2_ID" > "$LOG_FILE" &
 MONITOR_PID=$!
-echo "Resource Monitor started with PID: $MONITOR_PID, logging to $LOG_FILE"
+echo "Container Resource Monitor started with PID: $MONITOR_PID"
+
+# Start system monitor
+./system-monitor > "$SYS_LOG_FILE" &
+SYS_MONITOR_PID=$!
+echo "System-wide CPU Monitor started with PID: $SYS_MONITOR_PID"
 sleep 1
 
 # 4. Run Load Test
@@ -71,16 +81,15 @@ if [ $K6_EXIT_CODE -ne 0 ]; then
 fi
 cat run_test.log | ./bin/filter_k6_output.awk
 
-# Give the resource monitor a moment to log the final stats
 sleep 2
 
 # 5. Process and Display Results
 print_header "TEST RESULTS"
 
-# Process Resource Usage
-echo "--- Resource Usage Summary (Aggregated from 2 replicas) ---"
+# Process Container Resource Usage
+echo "--- App-Server Resource Usage (Aggregated from 2 replicas) ---"
 if [ ! -f "$LOG_FILE" ] || [ ! -s "$LOG_FILE" ]; then
-    echo "Log file '$LOG_FILE' not found or is empty. Cannot process resource usage."
+    echo "Container log file '$LOG_FILE' not found or is empty."
 else
     DATA_ROWS=$(tail -n +2 "$LOG_FILE")
     AVG_CPU=$(echo "$DATA_ROWS" | awk -F, '{ total += $2; count++ } END { if (count > 0) printf "%.4f", total/count; else print "0"; }')
@@ -92,8 +101,23 @@ else
     echo "Peak CPU Cores:    $PEAK_CPU"
     echo "Average Memory (MB): $AVG_MEM"
     echo "Peak Memory (MB):    $PEAK_MEM"
-    echo ""
 fi
+echo ""
+
+# Process System-wide CPU Usage
+echo "--- System-Wide CPU Usage (All Processes) ---"
+if [ ! -f "$SYS_LOG_FILE" ] || [ ! -s "$SYS_LOG_FILE" ]; then
+    echo "System log file '$SYS_LOG_FILE' not found or is empty."
+else
+    SYS_DATA_ROWS=$(tail -n +2 "$SYS_LOG_FILE")
+    SYS_AVG_CPU=$(echo "$SYS_DATA_ROWS" | awk -F, '{ total += $2; count++ } END { if (count > 0) printf "%.4f", total/count; else print "0"; }')
+    SYS_PEAK_CPU=$(echo "$SYS_DATA_ROWS" | awk -F, 'BEGIN { max=0 } { if ($2>max) max=$2 } END { printf "%.4f", max }')
+
+    echo "Average CPU Cores: $SYS_AVG_CPU"
+    echo "Peak CPU Cores:    $SYS_PEAK_CPU"
+fi
+echo ""
+
 
 # Process k6 Summary
 echo "--- k6 Performance Summary ---"
